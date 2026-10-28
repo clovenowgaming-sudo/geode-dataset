@@ -19,13 +19,13 @@ md("# MicroMind-Geode: QLoRA kecil di Colab\n"
    "2. Colab Secrets (ikon kunci) -> tambah `GITHUB_TOKEN` (token GitHub dengan scope `repo`), aktifkan akses notebook\n"
    "3. Ubah `RUN`, `MAX_SAMPLES`, `ONLY_PERMISSIVE` di sel konfigurasi tiap putaran, lalu Run all")
 
-code("!pip install -q -U transformers peft accelerate bitsandbytes datasets requests")
+code("!pip install -q -U transformers peft accelerate bitsandbytes datasets requests gguf")
 
 code(r'''import os, json, gzip, random, requests
 from google.colab import userdata
 
 REPO = "clovenowgaming-sudo/geode-dataset"
-BASE = "Qwen/Qwen2.5-Coder-1.5B-Instruct"
+BASE = "micromind_hf"   # hasil konversi dari MicroMind.gguf buatan kita
 RUN = "v1"                 # ganti tiap putaran: v2, v3, ...
 ONLY_PERMISSIVE = False    # True = hanya lisensi MIT/BSL/Apache/Unlicense (untuk versi publik)
 MAX_SAMPLES = 3000         # naikkan bertahap
@@ -39,6 +39,28 @@ for a in rel["assets"]:
     r = requests.get(a["url"], headers={**H, "Accept": "application/octet-stream"})
     open("data/" + a["name"], "wb").write(r.content)
     print(a["name"], len(r.content))
+''')
+
+code(r'''import subprocess, torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+GGUF_URL = "https://github.com/clovenowgaming-sudo/micromind/releases/latest/download/MicroMind.gguf"
+os.makedirs("gguf_in", exist_ok=True)
+subprocess.run(["curl", "-L", "-s", "-o", "gguf_in/MicroMind.gguf", GGUF_URL], check=True)
+print("MicroMind.gguf: %.2f GB" % (os.path.getsize("gguf_in/MicroMind.gguf") / 1e9))
+
+m0 = AutoModelForCausalLM.from_pretrained("gguf_in", gguf_file="MicroMind.gguf", torch_dtype=torch.float16)
+try:
+    tok0 = AutoTokenizer.from_pretrained("gguf_in", gguf_file="MicroMind.gguf")
+except Exception as e:
+    print("Tokenizer GGUF gagal (%s), pakai tokenizer Qwen yang kosakatanya sama" % e)
+    tok0 = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-1.5B-Instruct")
+if not tok0.chat_template:
+    tok0.chat_template = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-Coder-1.5B-Instruct").chat_template
+m0.save_pretrained(BASE)
+tok0.save_pretrained(BASE)
+del m0
+print("MicroMind.gguf -> HF selesai:", sorted(os.listdir(BASE)))
 ''')
 
 code(r'''SYS = "Kamu adalah MicroMind, asisten AI untuk coding dan pengembangan aplikasi. Tulis kode lengkap yang bisa langsung dijalankan, jelaskan singkat, dan jawab dengan bahasa yang dipakai pengguna."
