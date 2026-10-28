@@ -1,0 +1,43 @@
+name: build-geode-dataset
+
+on:
+  workflow_dispatch:
+    inputs:
+      mods_minutes:
+        description: "Batas waktu ambil repo mod (menit)"
+        default: "150"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Kumpulkan dataset
+        run: python build_dataset.py --out out --mods-minutes "${{ inputs.mods_minutes }}"
+
+      - name: Pecah file jika terlalu besar
+        run: |
+          cd out
+          f=geode-code.jsonl.gz
+          if [ "$(stat -c%s $f)" -gt 1900000000 ]; then
+            split -b 1800m -d $f $f.part-
+            rm $f
+          fi
+          ls -lh
+
+      - name: Release (privat)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "data-v${{ github.run_number }}" out/* \
+            --title "Dataset Geode ${{ github.run_number }}" \
+            --notes "Geode SDK 5.11.2: docs, header API, binding GD, kode mod open-source. Lisensi tiap file ada di field license."
